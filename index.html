@@ -3,133 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Real-time Crowd Dashboard</title>
+    <title>Crowd Monitoring Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background-color: #f4f7f6; 
-            color: #333; 
-            text-align: center; 
-            margin: 0; 
-            padding: 20px; 
-        }
-        .dashboard-container { 
-            max-width: 1000px; 
-            margin: 0 auto; 
-        }
-        .counter-card { 
-            background: white; 
-            padding: 40px; 
-            border-radius: 15px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
-            margin-bottom: 30px; 
-        }
-        .count-number { 
-            font-size: 8rem; 
-            font-weight: bold; 
-            color: #007bff; 
-            margin: 0; 
-            line-height: 1; 
-        }
-        .chart-container { 
-            background: white; 
-            padding: 20px; 
-            border-radius: 15px; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
-        }
+        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; }
+        .grid { display: flex; gap: 20px; justify-content: center; max-width: 1000px; margin: 0 auto 20px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); flex: 1; }
+        .label { font-size: 1.2rem; color: #65676b; }
+        .value { font-size: 4rem; font-weight: bold; margin: 10px 0; }
+        .chart-container { background: white; padding: 20px; border-radius: 12px; max-width: 1000px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
 
-<div class="dashboard-container">
-    <h1>📊 ระบบนับคนแบบ Real-time</h1>
-    
-    <div class="counter-card">
-        <h2>จำนวนคนในกล้องขณะนี้</h2>
-        <p class="count-number" id="currentCount">0</p>
+    <h1>📊 ระบบนับคนแบบ Real-time (รายนาที)</h1>
+
+    <div class="grid">
+        <div class="card">
+            <div class="label">จำนวนคนปัจจุบัน</div>
+            <div class="value" id="curVal" style="color: #007bff;">0</div>
+        </div>
+        <div class="card">
+            <div class="label">ยอดสะสมทั้งหมด</div>
+            <div class="value" id="accVal" style="color: #28a745;">0</div>
+        </div>
     </div>
 
     <div class="chart-container">
-        <canvas id="hourlyChart"></canvas>
+        <canvas id="crowdChart"></canvas>
     </div>
-</div>
 
 <script type="module">
-    // นำเข้า Firebase App และ Database เวอร์ชัน 12.12.0
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
     import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-database.js";
 
-    // Firebase configuration ของคุณ
     const firebaseConfig = {
         apiKey: "AIzaSyBrWpNgTQ2JD8Eo1qAde_AQeCv4MlaUylE",
         authDomain: "suchartwork-1487382986748.firebaseapp.com",
         databaseURL: "https://suchartwork-1487382986748.firebaseio.com",
         projectId: "suchartwork-1487382986748",
-        storageBucket: "suchartwork-1487382986748.firebasestorage.app",
-        messagingSenderId: "353884592527",
         appId: "1:353884592527:web:c0847e6fdd80d503eb13fa"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // 1. ดึงข้อมูลจำนวนคนปัจจุบันมาแสดงผลแบบ Real-time
-    const countRef = ref(db, 'dashboard/current');
-    onValue(countRef, (snapshot) => {
-        const data = snapshot.val();
-        if(data !== null) {
-            document.getElementById('currentCount').innerText = data;
-        }
-    });
+    // อัปเดตตัวเลขหน้าจอ
+    onValue(ref(db, 'dashboard/current'), (s) => document.getElementById('curVal').innerText = s.val() || 0);
+    onValue(ref(db, 'dashboard/accumulated'), (s) => document.getElementById('accVal').innerText = s.val() || 0);
 
-    // 2. ตั้งค่ากราฟรายชั่วโมง (Chart.js)
-    const ctx = document.getElementById('hourlyChart').getContext('2d');
-    const crowdChart = new Chart(ctx, {
+    // ตั้งค่ากราฟ
+    const ctx = document.getElementById('crowdChart').getContext('2d');
+    const chart = new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: [], // ชั่วโมง
-            datasets: [{
-                label: 'จำนวนคนในแต่ละช่วงเวลา',
-                data: [], // จำนวนนับ
-                borderColor: '#007bff',
-                tension: 0.4,
-                fill: true,
-                backgroundColor: 'rgba(0, 123, 255, 0.1)'
-            }]
-        },
-        options: { 
-            responsive: true,
-            scales: {
-                y: { beginAtZero: true }
-            }
-        }
+        data: { labels: [], datasets: [{ label: 'จำนวนคนรายนาที', data: [], borderColor: '#007bff', backgroundColor: 'rgba(0,123,255,0.1)', fill: true, tension: 0.3 }] },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
     });
 
-    // 3. ดึงข้อมูลประวัติเพื่อนำมาวาดกราฟ
-    const historyRef = ref(db, 'dashboard/history');
-    onValue(historyRef, (snapshot) => {
+    // ดึงประวัติรายนาที (30 นาทีล่าสุด)
+    onValue(ref(db, 'dashboard/history_minute'), (snapshot) => {
         const data = snapshot.val();
         if (data) {
-            // จัดเรียงข้อมูลตามเวลา
-            const labels = [];
-            const counts = [];
-            
-            // วนลูปอ่านข้อมูลจาก Firebase มาใส่กราฟ
-            for (const key in data) {
-                // สมมติว่า key คือเวลา เช่น "2024-04-19_10"
-                labels.push(key.split('_')[1] + ":00"); // เอาเฉพาะชั่วโมงมาแสดง
-                counts.push(data[key].count);
-            }
-
-            // อัปเดตกราฟ
-            crowdChart.data.labels = labels;
-            crowdChart.data.datasets[0].data = counts;
-            crowdChart.update();
+            const keys = Object.keys(data).sort().slice(-30);
+            chart.data.labels = keys.map(k => k.substring(11, 13) + ":" + k.substring(13, 15));
+            chart.data.datasets[0].data = keys.map(k => data[k].count);
+            chart.update();
         }
     });
 </script>
-
 </body>
 </html>
