@@ -2,64 +2,74 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <title>Advanced Crowd Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crowd Monitoring Dashboard</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        /* เพิ่มสไตล์ปุ่ม */
-        .btn-group { margin: 20px 0; display: flex; gap: 10px; justify-content: center; }
-        button { padding: 10px 25px; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; color: white; }
-        .btn-stop { background: #dc3545; }
-        .btn-start { background: #28a745; }
-        .btn-reset { background: #ffc107; color: black; }
-        .btn-export { background: #17a2b8; }
+        body { font-family: sans-serif; background: #f0f2f5; margin: 0; padding: 20px; text-align: center; }
+        .grid { display: flex; gap: 20px; justify-content: center; max-width: 1000px; margin: 0 auto 20px; }
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); flex: 1; }
+        .label { font-size: 1.2rem; color: #65676b; }
+        .value { font-size: 4rem; font-weight: bold; margin: 10px 0; }
+        .chart-container { background: white; padding: 20px; border-radius: 12px; max-width: 1000px; margin: 0 auto; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
-    <div class="btn-group">
-        <button class="btn-start" id="btnStart">เริ่มการทำงาน</button>
-        <button class="btn-stop" id="btnStop">หยุดชั่วคราว</button>
-        <button class="btn-reset" id="btnReset">รีเซ็ตค่าทั้งหมด</button>
-        <button class="btn-export" id="btnExport">ส่งออกเป็น Excel</button>
+
+    <h1>📊 ระบบนับคนแบบ Real-time (รายนาที)</h1>
+
+    <div class="grid">
+        <div class="card">
+            <div class="label">จำนวนคนปัจจุบัน</div>
+            <div class="value" id="curVal" style="color: #007bff;">0</div>
+        </div>
+        <div class="card">
+            <div class="label">ยอดสะสมทั้งหมด</div>
+            <div class="value" id="accVal" style="color: #28a745;">0</div>
+        </div>
     </div>
 
-    <script type="module">
-    // ... (Import และ Firebase Config ของคุณเหมือนเดิม) ...
-    import { getDatabase, ref, set, remove, get } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-database.js";
+    <div class="chart-container">
+        <canvas id="crowdChart"></canvas>
+    </div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-database.js";
+
+    const firebaseConfig = {
+        apiKey: "AIzaSyBrWpNgTQ2JD8Eo1qAde_AQeCv4MlaUylE",
+        authDomain: "suchartwork-1487382986748.firebaseapp.com",
+        databaseURL: "https://suchartwork-1487382986748.firebaseio.com",
+        projectId: "suchartwork-1487382986748",
+        appId: "1:353884592527:web:c0847e6fdd80d503eb13fa"
+    };
+
+    const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // 1. ระบบควบคุม Stop / Start
-    document.getElementById('btnStart').onclick = () => set(ref(db, 'dashboard/control/status'), 'run');
-    document.getElementById('btnStop').onclick = () => set(ref(db, 'dashboard/control/status'), 'stop');
+    // อัปเดตตัวเลขหน้าจอ
+    onValue(ref(db, 'dashboard/current'), (s) => document.getElementById('curVal').innerText = s.val() || 0);
+    onValue(ref(db, 'dashboard/accumulated'), (s) => document.getElementById('accVal').innerText = s.val() || 0);
 
-    // 2. ระบบ Reset ค่าในฐานข้อมูล
-    document.getElementById('btnReset').onclick = () => {
-        if(confirm("ยืนยันการลบข้อมูลทั้งหมด? ยอดสะสมจะเริ่มที่ 0 ใหม่")) {
-            remove(ref(db, 'dashboard')); // ลบข้อมูลทั้งหมดภายใต้ path dashboard
-            set(ref(db, 'dashboard/control/status'), 'run'); // ตั้งสถานะให้รันต่อ
-            location.reload(); // รีโหลดหน้าเว็บ
-        }
-    };
+    // ตั้งค่ากราฟ
+    const ctx = document.getElementById('crowdChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels: [], datasets: [{ label: 'จำนวนคนรายนาที', data: [], borderColor: '#007bff', backgroundColor: 'rgba(0,123,255,0.1)', fill: true, tension: 0.3 }] },
+        options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
 
-    // 3. ระบบส่งออกไฟล์ Excel
-    document.getElementById('btnExport').onclick = async () => {
-        const snapshot = await get(ref(db, 'dashboard/history_minute'));
+    // ดึงประวัติรายนาที (30 นาทีล่าสุด)
+    onValue(ref(db, 'dashboard/history_minute'), (snapshot) => {
         const data = snapshot.val();
-        if(!data) return alert("ไม่มีข้อมูลให้ส่งออก");
-
-        // แปลงข้อมูลจาก Firebase เป็นรูปแบบตารางสำหรับ Excel
-        const rows = Object.keys(data).map(key => ({
-            "วัน-เวลา": key,
-            "จำนวนคน (ขณะนั้น)": data[key].count,
-            "ยอดสะสม": data[key].accumulated,
-            "Timestamp": data[key].timestamp
-        }));
-
-        const worksheet = XLSX.utils.json_to_sheet(rows);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Crowd Data");
-        XLSX.writeFile(workbook, `Crowd_Report_${new Date().getTime()}.xlsx`);
-    };
+        if (data) {
+            const keys = Object.keys(data).sort().slice(-30);
+            chart.data.labels = keys.map(k => k.substring(11, 13) + ":" + k.substring(13, 15));
+            chart.data.datasets[0].data = keys.map(k => data[k].count);
+            chart.update();
+        }
+    });
 </script>
 </body>
 </html>
