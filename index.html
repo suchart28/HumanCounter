@@ -2,163 +2,111 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard ระบบนับคน Real-time</title>
+    <title>Real-time Crowd Dashboard M4</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; text-align: center; margin: 0; padding: 20px; }
-        .container { max-width: 1100px; margin: 0 auto; }
-        .card-container { display: flex; gap: 20px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); flex: 1; min-width: 250px; }
-        .card h2 { margin-top: 0; color: #555; font-size: 1.5rem; }
-        .count-number { font-size: 5rem; font-weight: bold; margin: 10px 0 0 0; line-height: 1; }
-        .current-color { color: #007bff; }
-        .total-color { color: #28a745; }
-        
-        .btn-group { display: flex; gap: 15px; justify-content: center; margin-bottom: 30px; flex-wrap: wrap; }
-        button { padding: 12px 25px; border: none; border-radius: 8px; font-size: 1.1rem; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        button:hover { transform: translateY(-2px); opacity: 0.9; }
-        button:active { transform: translateY(0); }
-        .btn-start { background-color: #28a745; }
-        .btn-stop { background-color: #dc3545; }
-        .btn-reset { background-color: #ffc107; color: #000; }
-        .btn-export { background-color: #17a2b8; }
-        
-        .chart-wrapper { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        body { font-family: 'Prompt', sans-serif; background: #f8fafc; padding: 20px; text-align: center; color: #1e293b; }
+        .card-wrap { display: flex; gap: 20px; justify-content: center; margin-bottom: 25px; }
+        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); flex: 1; max-width: 400px; }
+        .num { font-size: 5rem; font-weight: 800; margin: 10px 0; }
+        .btn-box { margin-bottom: 30px; display: flex; gap: 12px; justify-content: center; }
+        button { padding: 12px 24px; border: none; border-radius: 10px; font-weight: 600; cursor: pointer; transition: 0.2s; color: white; }
+        button:hover { filter: brightness(0.9); transform: translateY(-1px); }
+        .st { background: #10b981; } .sp { background: #ef4444; }
+        .rs { background: #f59e0b; color: white; } .ex { background: #3b82f6; }
+        .chart-card { background: white; padding: 20px; border-radius: 16px; max-width: 1000px; margin: 0 auto; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>📊 ระบบรายงานฝูงชน (Crowd Analytics)</h1>
-    
-    <div class="card-container">
+    <h1>📊 แดชบอร์ดวิเคราะห์จำนวนผู้ร่วมงาน</h1>
+
+    <div class="card-wrap">
         <div class="card">
-            <h2>จำนวนคนในพื้นที่ขณะนี้</h2>
-            <p class="count-number current-color" id="currentCount">0</p>
+            <div>กำลังนับได้ (คน)</div>
+            <div class="num" id="cVal" style="color: #3b82f6;">0</div>
         </div>
         <div class="card">
-            <h2>ยอดผู้เข้าร่วมสะสมทั้งหมด</h2>
-            <p class="count-number total-color" id="totalCount">0</p>
+            <div>ยอดสะสมทั้งหมด (คน)</div>
+            <div class="num" id="aVal" style="color: #10b981;">0</div>
         </div>
     </div>
 
-    <div class="btn-group">
-        <button class="btn-start" id="btnStart">▶️ เริ่มประมวลผล</button>
-        <button class="btn-stop" id="btnStop">⏸️ หยุดชั่วคราว</button>
-        <button class="btn-reset" id="btnReset">🔄 ล้างข้อมูลและเริ่มใหม่</button>
-        <button class="btn-export" id="btnExport">📥 ดาวน์โหลด Excel</button>
+    <div class="btn-box">
+        <button class="st" id="start">▶ เริ่มนับ</button>
+        <button class="sp" id="stop">⏸ หยุดชั่วคราว</button>
+        <button class="rs" id="reset">🔄 รีเซ็ตค่าเป็น 0</button>
+        <button class="ex" id="export">📥 ส่งออก Excel</button>
     </div>
 
-    <div class="chart-wrapper">
-        <canvas id="hourlyChart"></canvas>
+    <div class="chart-card">
+        <canvas id="myChart"></canvas>
     </div>
-</div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js";
     import { getDatabase, ref, onValue, set, remove, get } from "https://www.gstatic.com/firebasejs/12.12.0/firebase-database.js";
 
-    // Firebase Configuration
     const firebaseConfig = {
         apiKey: "AIzaSyBrWpNgTQ2JD8Eo1qAde_AQeCv4MlaUylE",
         authDomain: "suchartwork-1487382986748.firebaseapp.com",
         databaseURL: "https://suchartwork-1487382986748.firebaseio.com",
         projectId: "suchartwork-1487382986748",
-        storageBucket: "suchartwork-1487382986748.firebasestorage.app",
-        messagingSenderId: "353884592527",
         appId: "1:353884592527:web:c0847e6fdd80d503eb13fa"
     };
 
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // 1. อัปเดตตัวเลข Real-time
-    onValue(ref(db, 'dashboard/current'), (s) => document.getElementById('currentCount').innerText = s.val() || 0);
-    onValue(ref(db, 'dashboard/accumulated'), (s) => document.getElementById('totalCount').innerText = s.val() || 0);
+    // ดึงค่ามาแสดง
+    onValue(ref(db, 'dashboard/current'), s => document.getElementById('cVal').innerText = s.val() || 0);
+    onValue(ref(db, 'dashboard/accumulated'), s => document.getElementById('aVal').innerText = s.val() || 0);
 
-    // 2. ระบบควบคุม (Start / Stop)
-    document.getElementById('btnStart').onclick = () => set(ref(db, 'dashboard/control/status'), 'run');
-    document.getElementById('btnStop').onclick = () => set(ref(db, 'dashboard/control/status'), 'stop');
-
-    // 3. ระบบ Reset ข้อมูล (แก้ไขให้ใช้งานได้ 100%)
-    document.getElementById('btnReset').onclick = () => {
-        if(confirm("ยืนยันการล้างข้อมูลทั้งหมด? ยอดสะสมจะเริ่มที่ 0 ใหม่ทันที")) {
-            // ลบประวัติกราฟ
-            remove(ref(db, 'dashboard/history_minute'));
-            // บังคับเซ็ตค่าเป็น 0 เพื่อให้ Python รู้ว่ามีการรีเซ็ต
-            set(ref(db, 'dashboard/accumulated'), 0);
+    // ปุ่มควบคุม
+    document.getElementById('start').onclick = () => set(ref(db, 'dashboard/control/status'), 'run');
+    document.getElementById('stop').onclick = () => set(ref(db, 'dashboard/control/status'), 'stop');
+    
+    // แก้ไขฟังก์ชัน Reset: ต้อง set เป็น 0 เท่านั้น เพื่อให้ Python ตรวจเจอ
+    document.getElementById('reset').onclick = () => {
+        if(confirm("ยืนยันการล้างข้อมูลประวัติและเริ่มนับใหม่จาก 0?")) {
+            remove(ref(db, 'dashboard/history_minute')); // ลบกราฟ
+            set(ref(db, 'dashboard/accumulated'), 0); // ตั้งค่า 0 เพื่อแจ้ง Python
             set(ref(db, 'dashboard/current'), 0);
-            // ให้รันต่ออัตโนมัติ
             set(ref(db, 'dashboard/control/status'), 'run');
-            
-            alert("กำลังส่งคำสั่งล้างข้อมูลไปยังเครื่องประมวลผล...");
+            alert("ระบบกำลังล้างข้อมูลในเครื่อง Mac... กรุณารอสักครู่");
         }
     };
 
-    // 4. ระบบส่งออกข้อมูล Excel
-    document.getElementById('btnExport').onclick = async () => {
-        const snapshot = await get(ref(db, 'dashboard/history_minute'));
-        const data = snapshot.val();
-        
-        if(!data) {
-            alert("ยังไม่มีข้อมูลประวัติให้ส่งออกครับ");
-            return;
-        }
-
-        const rows = Object.keys(data).map(key => ({
-            "วันที่-เวลา": key.replace('_', ' เวลา '),
-            "คนในขณะนั้น": data[key].count,
-            "ยอดสะสมรวม": data[key].accumulated
-        }));
-
-        const worksheet = XLSX.utils.json_to_sheet(rows);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Crowd Data");
-        XLSX.writeFile(workbook, `รายงานฝูงชน_${new Date().getTime()}.xlsx`);
+    // ส่งออก Excel
+    document.getElementById('export').onclick = async () => {
+        const snap = await get(ref(db, 'dashboard/history_minute'));
+        if(!snap.exists()) return alert("ไม่มีข้อมูล");
+        const rows = Object.keys(snap.val()).map(k => ({ "เวลา": k, "จำนวนคน": snap.val()[k].count, "ยอดสะสม": snap.val()[k].accumulated }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Report");
+        XLSX.writeFile(wb, `Report_${new Date().getTime()}.xlsx`);
     };
 
-    // 5. วาดกราฟ (ดึง 45 นาทีล่าสุด)
-    const ctx = document.getElementById('hourlyChart').getContext('2d');
-    const crowdChart = new Chart(ctx, {
+    // วาดกราฟ
+    const ctx = document.getElementById('myChart').getContext('2d');
+    const chart = new Chart(ctx, {
         type: 'line',
-        data: {
-            labels: [],
-            datasets: [{
-                label: 'ปริมาณคนในแต่ละนาที',
-                data: [],
-                borderColor: '#007bff',
-                backgroundColor: 'rgba(0, 123, 255, 0.1)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.3,
-                pointRadius: 3
-            }]
-        },
-        options: { 
-            responsive: true,
-            scales: { y: { beginAtZero: true } }
-        }
+        data: { labels: [], datasets: [{ label: 'จำนวนคนต่อนาที', data: [], borderColor: '#3b82f6', fill: true, backgroundColor: 'rgba(59, 130, 246, 0.1)' }] }
     });
 
-    onValue(ref(db, 'dashboard/history_minute'), (snapshot) => {
-        const data = snapshot.val();
-        if (data) {
-            // เรียงลำดับเวลาและตัดเอาเฉพาะ 45 รายการล่าสุด
-            const keys = Object.keys(data).sort().slice(-45);
-            
-            crowdChart.data.labels = keys.map(k => k.substring(11, 13) + ":" + k.substring(13, 15));
-            crowdChart.data.datasets[0].data = keys.map(k => data[k].count);
-            crowdChart.update();
+    onValue(ref(db, 'dashboard/history_minute'), snap => {
+        const data = snap.val();
+        if(data) {
+            const keys = Object.keys(data).sort().slice(-40);
+            chart.data.labels = keys.map(k => k.substring(11, 13) + ":" + k.substring(13, 15));
+            chart.data.datasets[0].data = keys.map(k => data[k].count);
+            chart.update();
         } else {
-            // กรณีถูกลบข้อมูล ให้เคลียร์กราฟ
-            crowdChart.data.labels = [];
-            crowdChart.data.datasets[0].data = [];
-            crowdChart.update();
+            chart.data.labels = []; chart.data.datasets[0].data = []; chart.update();
         }
     });
 </script>
-
 </body>
 </html>
